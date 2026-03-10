@@ -12,11 +12,19 @@ class Transaction extends Model
 
     use HasUuids;
 
-    protected $fillable = [];
+    protected $fillable = [
+        'gateway_id',
+        'amount',
+        'currency',
+        'status',
+        'escrow_duration',
+        'metadata'
+    ];
 
     protected $casts = [
         'metadata' => 'json',
-        'amount' => 'integer'
+        'amount' => 'integer',
+        'escrow_duration' => 'integer'
     ];
 
     public function gateway(): BelongsTo{

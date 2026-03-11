@@ -38,7 +38,8 @@ class PaymentService
             'escrow_duration' => $data['escrow_duration'] ?? null,
             'metadata' => [
                 'external_id' => $paymentInfo->external_id,
-                'payment_url' => $paymentInfo->url
+                'payment_url' => $paymentInfo->url,
+                'payout_destination' => $data['payout_destination']
             ]
         ]);
     }

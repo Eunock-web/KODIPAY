@@ -22,11 +22,12 @@ class PaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'gateway_id' => ['string'],
-            'amount' => ['integer'],
-            'currency' => ['string', 'max:5'],
-            'customer_email' => ['email'],
-            'escrow_duration' => ['nullable', 'integer']
+            'gateway_id' => ['required', 'string'],
+            'amount' => ['required', 'integer', 'min:1'],
+            'currency' => ['required', 'string', 'max:5'],
+            'customer_email' => ['nullable', 'email'],
+            'escrow_duration' => ['nullable', 'integer', 'min:1'],
+            'payout_destination' => ['nullable', 'string'],
         ];
     }
 }

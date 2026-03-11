@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function register(AuthRequest $request){
-        try{
+    public function register(AuthRequest $request)
+    {
+        try {
             $data = $request->validated();
             $password = Hash::make($data['password']);
             $data['password'] = $password;
@@ -21,27 +22,25 @@ class AuthController extends Controller
                 'message' => 'Register successfully',
                 'user' => $user
             ]);
-
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
             ], 500);
         }
-
-
     }
 
-    public function login(Request $request){
-        try{
-            $request->validate([
-                'email' => 'required|email',
-                'password' => 'required',
-            ]);
+    public function login(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
 
+        try {
             $user = User::where('email', $request->email)->first();
 
-            if (! $user || ! Hash::check($request->password, $user->password)) {
+            if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json(['message' => 'Identifiants incorrects'], 401);
             }
 
@@ -49,7 +48,7 @@ class AuthController extends Controller
                 'token' => $user->createToken('kodipay_token')->plainTextToken,
                 'user' => $user
             ]);
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()

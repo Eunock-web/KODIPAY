@@ -2,14 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\Gateway;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Models\Gateway;
+use Illuminate\Database\Eloquent\Model;
 
 class Transaction extends Model
 {
-
     use HasUuids;
 
     protected $fillable = [
@@ -27,12 +26,13 @@ class Transaction extends Model
         'escrow_duration' => 'integer'
     ];
 
-    public function gateway(): BelongsTo{
+    public function gateway(): BelongsTo
+    {
         return $this->belongsTo(Gateway::class);
     }
 
-    public function scopeHeld($query){
-        return $query->where('statuts', 'held');
+    public function scopeHeld($query)
+    {
+        return $query->where('status', 'held');
     }
-
 }

@@ -1,31 +1,35 @@
 <?php
 namespace App\Gateways\Fedapay;
 use App\Core\Payments\Contract\PaymentsGatewayInterface;
-
+use FedaPay\Transaction;
 
 class FedapayDriver implements PaymentsGatewayInterface {
 
-    public function __construct(private string $apiKey, private bool $is_live){
-        $this->apiKey = $apiKey;
-        $this->is_live = $is_live;
-    }
+    public function __construct(private string $apiKey, private bool $is_live){}
 
     public function makePayment(int $amount, string $currency, array $options): object{
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
-        \FedaPay\Fedapay::setApiKey('YOUR_API_KEY');
+        \FedaPay\Fedapay::setApiKey($this->apiKey);
 
-        $transaction = \FedaPay\Transaction::create([
-            'description' => 'Paiement KODIPAY',
+        // Création de la transaction chez FedaPay
+        $fedapayTransaction = Transaction::create([
             'amount' => $amount,
             'currency' => ['iso' => $currency],
-            'callback_url' => $options['callback_url'],
+            'description' => $options['description'] ?? 'Paiement KODIPAY',
+            'callback_url' => $options['callback_url'] ?? null,
             'customer' => [
-                'firstname' => $options['firstname'],
-                'lastname' => $options['lastname'],
-                'email' => $options['email'],
+                'firstname' => $options['firstname'] ?? 'Client',
+                'lastname' => $options['lastname'] ?? 'KODIPAY',
+                'email' => $options['email']
             ]
         ]);
-        return $transaction;
+
+        $token = $fedapayTransaction->generateToken();
+
+        return (object) [
+            'external_id' => $fedapayTransaction->id,
+            'url' => $token->url
+        ];
     }
 
     public function payout(int $amount, string $currency, string $destination): object{

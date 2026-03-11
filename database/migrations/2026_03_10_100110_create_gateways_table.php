@@ -13,8 +13,9 @@ return new class extends Migration
     {
         Schema::create('gateways', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            $table->jsonb('settings');
+            $table->uuid('user_id');
+            $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
+            $table->jsonb('settings')->nullable();
             $table->string('gateway_type');
             $table->text('api_key');
             $table->boolean('is_live')->default(false);
@@ -22,7 +23,7 @@ return new class extends Migration
         });
     }
 
-    
+
     /**
      * Reverse the migrations.
      */

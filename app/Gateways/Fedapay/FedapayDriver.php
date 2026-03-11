@@ -9,7 +9,7 @@ class FedapayDriver implements PaymentsGatewayInterface {
 
     public function makePayment(int $amount, string $currency, array $options): object{
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
-        \FedaPay\Fedapay::setApiKey($this->apiKey);
+        \FedaPay\FedaPay::setApiKey($this->apiKey);
 
         // Création de la transaction chez FedaPay
         $fedapayTransaction = Transaction::create([

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\GatewayController;
 use App\Http\Controllers\Api\PaymentController;
 use Illuminate\Http\Request;
@@ -18,6 +19,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments', [PaymentController::class, 'store']);
 });
 
-//Route pour les webhooks 
+//Route pour les webhooks
 Route::post('/webhooks/fedapay/{gateway_id}', [PaymentController::class, 'callback'])
     ->name('webhooks.fedapay');
+
+
+//Route pour l'authentification
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+

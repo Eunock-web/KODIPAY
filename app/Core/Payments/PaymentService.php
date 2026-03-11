@@ -12,7 +12,7 @@ class PaymentService
     /**
      * Cette méthode doit retourner le bon Driver selon le type stocké en base
      */
-    private function resolveDriver(Gateway $gateway): PaymentsGatewayInterface
+    public function resolveDriver(Gateway $gateway): PaymentsGatewayInterface
     {
         if($gateway->gateway_type == 'fedapay'){
             return new FedapayDriver($gateway->api_key, $gateway->is_live);

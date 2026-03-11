@@ -7,6 +7,7 @@ use App\Http\Requests\GatewayRequest;
 
 class GatewayController extends Controller
 {
+    //Fonction pour la configuration du gateway du fournisseur
     public function store(GatewayRequest $request){
         try{
             $validatedData = $request->validated();
@@ -26,5 +27,5 @@ class GatewayController extends Controller
         }
     }
 
-    
+
 }

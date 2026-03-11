@@ -39,6 +39,7 @@ class PaymentService
             'metadata' => [
                 'external_id' => $paymentInfo->external_id,
                 'payment_url' => $paymentInfo->url,
+                'payment_token' => $paymentInfo->token,
                 'payout_destination' => $data['payout_destination']
             ]
         ]);

@@ -39,7 +39,8 @@ class FedapayDriver implements PaymentsGatewayInterface
 
         return (object) [
             'external_id' => $fedapayTransaction->id,
-            'url' => $token->url
+            'url' => $token->url,
+            'token' => $token->token
         ];
     }
 

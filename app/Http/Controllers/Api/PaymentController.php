@@ -31,7 +31,7 @@ class PaymentController extends Controller
             $data = array_merge($request->validated(), [
                 'email' => $user->email,
                 'firstname' => $user->name,
-                'lastname' => '',
+                'lastname' => $user->lastname ?? 'YAGAMI',
             ]);
 
             $transaction = $this->service->initiate($gateway, $data);
@@ -48,33 +48,84 @@ class PaymentController extends Controller
         }
     }
 
+    public function handleReturn(Request $request, $gateway_id)
+    {
+        $status = $request->query('status');
+        $external_id = $request->query('id');
+
+        \Illuminate\Support\Facades\Log::info('FedaPay redirection (Return URL) reached', [
+            'gateway_id' => $gateway_id,
+            'status' => $status,
+            'external_id' => $external_id
+        ]);
+
+        // 1. Trouver la transaction locale correspondante
+        $transaction = Transaction::where('metadata->external_id', $external_id)->first();
+
+        if ($transaction) {
+            // 2. Déclencher une réconciliation manuelle immédiate
+            $this->service->reconcile($transaction);
+
+            // 3. Rediriger vers l'URL de retour du client SI elle existe
+            if ($transaction->callback_url) {
+                // On ajoute les paramètres à l'URL de retour pour que le client sache le résultat
+                $separator = str_contains($transaction->callback_url, '?') ? '&' : '?';
+                $redirectUrl = $transaction->callback_url . $separator . "id={$transaction->id}&status={$transaction->status}";
+
+                return redirect($redirectUrl);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Transition terminée',
+            'status' => $transaction ? $transaction->status : $status,
+            'external_id' => $external_id,
+            'internal_id' => $transaction ? $transaction->id : null
+        ]);
+    }
+
     public function callback(Request $request, $gateway_id)
     {
-        try {
-            $gateway = Gateway::findOrFail($gateway_id);
+        // Cette méthode semble être une ancienne version,
+        // on redirige vers la méthode processWebhook universelle
+        return $this->processWebhook($request, $gateway_id);
+    }
 
-            // On récupère le driver pour valider la signature
-            $driver = $this->service->resolveDriver($gateway);
-            $verifiedData = $driver->validateWebhook($request->all(), $request->headers->all());
+    // Pour FedaPay
+    public function callbackFedaPay(Request $request, $gateway_id)
+    {
+        return $this->processWebhook($request, $gateway_id);
+    }
 
-            // On cherche la transaction correspondante par l'ID externe
-            $transaction = Transaction::where('metadata->external_id', $verifiedData->external_id)->firstOrFail();
+    // Pour KKAPay
+    public function callbackKKAPay(Request $request, $gateway_id)
+    {
+        return $this->processWebhook($request, $gateway_id);
+    }
 
-            // Si FedaPay confirme que c'est payé
-            if ($verifiedData->event === 'transaction.approved') {
-                $transaction->update([
-                    'status' => 'held',
-                    'metadata' => array_merge($transaction->metadata, [
-                        'confirmed_at' => now(),
-                        // On calcule la date de libération ici
-                        'expires_at' => now()->addHours($transaction->escrow_duration ?? 24)
-                    ])
-                ]);
-            }
+    /**
+     * La méthode privée qui fait tout le travail "universel"
+     */
+    private function processWebhook(Request $request, $gateway_id)
+    {
+        $gateway = Gateway::findOrFail($gateway_id);
+        $driver = $this->service->resolveDriver($gateway);
 
-            return response()->json(['message' => 'Event processed'], 200);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 400);
+        // Le driver traduit le langage spécifique du prestataire en langage KODIPAY
+        $verifiedData = $driver->validateWebhook($request->all(), $request->headers->all());
+
+        $transaction = Transaction::where('metadata->external_id', $verifiedData->external_id)->firstOrFail();
+
+        if ($verifiedData->event === 'transaction.approved' && $transaction->status === 'pending') {
+            $transaction->update([
+                'status' => 'held',
+                'metadata' => array_merge($transaction->metadata, [
+                    'confirmed_at' => now(),
+                    'expires_at' => now()->addHours($transaction->escrow_duration ?? 24)
+                ])
+            ]);
         }
+
+        return response()->json(['status' => 'processed']);
     }
 }

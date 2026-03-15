@@ -10,7 +10,8 @@ class FedapayDriver implements PaymentsGatewayInterface
 {
     public function __construct(
         private string $apiKey,
-        private bool $is_live
+        private bool $is_live,
+        private array $settings = []
     ) {}
 
     public function makePayment(int $amount, string $currency, array $options): object
@@ -18,30 +19,49 @@ class FedapayDriver implements PaymentsGatewayInterface
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
         \FedaPay\FedaPay::setApiKey($this->apiKey);
 
-        // Création de la transaction chez FedaPay
-        $fedapayTransaction = Transaction::create([
+        $params = [
             'amount' => $amount,
             'currency' => ['iso' => $currency],
             'description' => $options['description'] ?? 'Paiement KODIPAY',
-            'callback_url' => $options['callback_url'] ?? null,
+            'callback_url' => route('payments.callback', ['gateway_id' => $options['gateway_id'] ?? 'unknown']),  // URL de redirection client
             'customer' => [
                 'firstname' => $options['firstname'] ?? 'Client',
                 'lastname' => $options['lastname'] ?? 'KODIPAY',
-                'email' => $options['email'],
+                'email' => $options['email'] ?? 'customer@example.com',
                 'phone_number' => [
-                    'number' => $options['phone'] ?? '6600111000',
+                    'number' => $options['phone'] ?? '66000001',
                     'country' => $options['country'] ?? 'bj'
                 ]
+            ],
+            'merchant_reference' => 'KODI-' . uniqid(),
+            'custom_metadata' => [
+                'payout_destination' => $options['payout_destination'] ?? null,
             ]
-        ]);
-
-        $token = $fedapayTransaction->generateToken();
-
-        return (object) [
-            'external_id' => $fedapayTransaction->id,
-            'url' => $token->url,
-            'token' => $token->token
         ];
+
+        \Illuminate\Support\Facades\Log::info('Initiating FedaPay payment', ['params' => $params]);
+
+        try {
+            $fedapayTransaction = \FedaPay\Transaction::create($params);
+            $token = $fedapayTransaction->generateToken();
+
+            \Illuminate\Support\Facades\Log::info('FedaPay payment initiated successfully', [
+                'id' => $fedapayTransaction->id,
+                'token' => $token->token
+            ]);
+
+            return (object) [
+                'external_id' => $fedapayTransaction->id,
+                'url' => $token->url,
+                'token' => $token->token
+            ];
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('FedaPay Payment Error', [
+                'message' => $e->getMessage(),
+                'params' => $params
+            ]);
+            throw $e;
+        }
     }
 
     public function payout(int $amount, string $currency, string $destination): object
@@ -96,6 +116,9 @@ class FedapayDriver implements PaymentsGatewayInterface
 
     public function validateWebhook(array $payload, array $headers): object
     {
+        \FedaPay\FedaPay::setApiKey($this->apiKey);
+        \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
+
         try {
             // Récupération de la signature (insensible à la casse des headers)
             $signature = $headers['x-fedapay-signature'][0] ?? null;
@@ -104,12 +127,14 @@ class FedapayDriver implements PaymentsGatewayInterface
                 throw new \Exception('Signature manquante.');
             }
 
+            // Utiliser le secret webhook si disponible, sinon la clé API
+            $secret = $this->settings['webhook_secret'] ?? $this->apiKey;
+
             // Vérification cryptographique via le SDK
-            // On repasse le payload en JSON et on compare avec la signature
             $event = Webhook::constructEvent(
                 json_encode($payload),
                 $signature,
-                $this->apiKey
+                $secret
             );
 
             // On retourne un objet standardisé pour notre PaymentService
@@ -120,8 +145,49 @@ class FedapayDriver implements PaymentsGatewayInterface
                 'raw_data' => $event->data
             ];
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('FedaPay Webhook Validation Error', [
+                'error' => $e->getMessage()
+            ]);
             // Si la signature est fausse, on bloque tout
             throw new \Exception('Validation Webhook échouée : ' . $e->getMessage());
+        }
+    }
+
+    public function retrieveTransaction(string $externalId): object
+    {
+        \FedaPay\FedaPay::setApiKey($this->apiKey);
+        \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
+
+        try {
+            $fedapayTransaction = \FedaPay\Transaction::retrieve($externalId);
+
+            \Illuminate\Support\Facades\Log::info('FedaPay transaction retrieved for reconciliation', [
+                'id' => $externalId,
+                'status' => $fedapayTransaction->status,
+                'raw_status' => $fedapayTransaction->status ?? 'unknown'
+            ]);
+
+            // Mapper le statut FedaPay vers le statut KODIPAY si nécessaire
+            // FedaPay status: approved, pending, canceled, declined, transferred, refunded
+            $status = 'pending';
+            if ($fedapayTransaction->status === 'approved') {
+                $status = 'success';
+            } elseif (in_array($fedapayTransaction->status, ['canceled', 'declined', 'refunded'])) {
+                $status = 'failed';
+            }
+
+            return (object) [
+                'status' => $status,
+                'external_id' => $fedapayTransaction->id,
+                'event' => 'transaction.' . $fedapayTransaction->status,
+                'raw_data' => $fedapayTransaction
+            ];
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('FedaPay Transaction Retrieval Error', [
+                'id' => $externalId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
     }
 }

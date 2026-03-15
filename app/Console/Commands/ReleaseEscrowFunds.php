@@ -55,7 +55,28 @@ class ReleaseEscrowFunds extends Command
                     $this->info("Succès pour la transaction {$transaction->id}");
 
                 } catch (\Exception $e) {
-                    $this->error("Erreur pour {$transaction->id}: " . $e->getMessage());
+                    $attempts = ($transaction->metadata['payout_attempts'] ?? 0) + 1;
+                    if ($attempts >= 3) {
+                        // Après 3 essais, on abandonne et on alerte
+                        $transaction->update([
+                            'status' => 'payout_failed',
+                            'metadata' => array_merge($transaction->metadata, [
+                                'payout_attempts' => $attempts,
+                                'last_error' => $e->getMessage(),
+                                'requires_manual_intervention' => true
+                            ])
+                        ]);
+                        $this->error("Paiement ID {$transaction->id} définitivement échoué.");
+                    }else{
+                        // On incrémente juste le compteur, la commande réessaiera au prochain passage
+                        $transaction->update([
+                            'metadata' => array_merge($transaction->metadata, [
+                                'payout_attempts' => $attempts,
+                                'last_error' => $e->getMessage()
+                            ])
+                        ]);
+                        $this->warn("Échec temporaire pour ID {$transaction->id} (Tentative $attempts/3)");
+                    }
                 }
             }
         }

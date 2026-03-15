@@ -17,7 +17,8 @@ class Transaction extends Model
         'currency',
         'status',
         'escrow_duration',
-        'metadata'
+        'metadata',
+        'callback_url'  
     ];
 
     protected $casts = [

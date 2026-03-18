@@ -18,7 +18,8 @@ class PaymentServiceTest extends TestCase
         $user = User::factory()->create();
         $gateway = $user->gateways()->create([
             'gateway_type' => 'fedapay',
-            'api_key' => 'sk_live_123',
+            'public_key' => 'pk_live_123',
+            'private_key' => 'sk_live_123',
             'is_live' => true,
         ]);
 

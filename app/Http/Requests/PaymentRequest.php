@@ -29,6 +29,8 @@ class PaymentRequest extends FormRequest
             'escrow_duration' => ['nullable', 'integer', 'min:1'],
             'payout_destination' => ['nullable', 'string'],
             'callback_url' => ['nullable', 'url'],
+            'phone' => ['nullable', 'string'],
+            'transaction_type' => ['nullable', 'string', 'in:collect,payout'],
         ];
     }
 }

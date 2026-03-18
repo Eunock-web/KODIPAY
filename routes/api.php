@@ -25,7 +25,7 @@ Route::get('/payments/callback/{gateway_id}', [PaymentController::class, 'handle
     ->name('payments.callback');
 
 // Webhook KKAPay
-Route::get('/webhooks/kkapay/{gateway_id}', [PaymentController::class, 'callbackKKAPay'])
+Route::post('/webhooks/kkapay/{gateway_id}', [PaymentController::class, 'callbackKKAPay'])
     ->name('webhooks.kkapay');
 
 // Route pour l'authentification

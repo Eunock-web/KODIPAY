@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Frontend - KODIPAY API & FedaPay</title>
+    <!-- 1. Import du SDK FedaPay pour le frontend -->
+    <script src="https://checkout.fedapay.com/js/checkout.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 20px; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h2 { text-align: center; color: #2c3e50; margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #7f8c8d; margin-bottom: 30px; font-size: 14px; }
+        .section { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        .section:last-child { border-bottom: none; }
+        .section-title { font-size: 16px; font-weight: 600; color: #34495e; margin-bottom: 15px; }
+        label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: #555; }
+        input, select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { width: 100%; padding: 14px; background: #3498db; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        #status-box { margin-top: 20px; padding: 15px; border-radius: 6px; display: none; font-size: 14px; line-height: 1.5; word-break: break-all; }
+        .info { background: #e8f4f8; border: 1px solid #b6d4fe; color: #084298; }
+        .error { background: #f8e8e8; border: 1px solid #f5c2c7; color: #842029; }
+        .success { background: #e8f8ec; border: 1px solid #badbcc; color: #0f5132; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Simulation Frontend (SPA)</h2>
+    <p class="subtitle">Flux complet : Frontend -> Backend API KODIPAY -> Widget FedaPay</p>
+
+    <div class="section">
+        <div class="section-title">🔧 1. Configuration (Normalement gérée par l'app)</div>
+        <label>Token d'Authentification API (Sanctum/JWT) :</label>
+        <input type="text" id="apiAuthToken" placeholder="Ex: 3|xyz123...">
+        
+        <label>ID de la passerelle KODIPAY (Gateway ID) :</label>
+        <input type="text" id="gatewayId" value="1">
+            
+        <label>Clé publique FedaPay :</label>
+        <input type="text" id="publicKey" placeholder="pk_sandbox_...">
+    </div>
+
+    <div class="section">
+        <div class="section-title">🛒 2. Détails de l'achat</div>
+        <div style="display: flex; gap: 10px;">
+            <div style="flex: 2;">
+                <label>Montant :</label>
+                <input type="number" id="amount" value="5000">
+            </div>
+            <div style="flex: 1;">
+                <label>Devise :</label>
+                <select id="currency">
+                    <option value="XOF">XOF (FCFA)</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                </select>
+            </div>
+        </div>
+
+        <label>Numéro de téléphone (pour Push MM direct) :</label>
+        <input type="text" id="phone" value="66000001">
+
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+            <input type="checkbox" id="directPush" style="width: auto; margin: 0;"> Activer le Push Mobile Money direct (sans widget)
+        </label>
+    </div>
+
+    <button id="payButton" onclick="processPayment()">Payer maintenant</button>
+
+    <div id="status-box"></div>
+</div>
+
+<script>
+    const API_URL = 'http://localhost:8000/api/payments'; // Ajustez si votre API est sur un autre port/domaine
+
+    function showStatus(message, type = 'info') {
+        const statusBox = document.getElementById('status-box');
+        statusBox.style.display = 'block';
+        statusBox.className = type;
+        statusBox.innerHTML = message;
+    }
+
+    async function processPayment() {
+        // --- 1. Récupération des données du formulaire ---
+        const apiAuthToken = document.getElementById('apiAuthToken').value;
+        const gatewayId = document.getElementById('gatewayId').value;
+        const publicKey = document.getElementById('publicKey').value;
+        const amount = document.getElementById('amount').value;
+        const currency = document.getElementById('currency').value;
+        const payButton = document.getElementById('payButton');
+
+        if (!apiAuthToken || !gatewayId || !publicKey || !amount) {
+            showStatus('Veuillez remplir tous les champs !', 'error');
+            return;
+        }
+
+        try {
+            payButton.disabled = true;
+            payButton.innerText = "Création du paiement en cours...";
+            showStatus("⏳ Contact avec l'API KODIPAY...", "info");
+
+            // --- 2. Appel au backend KODIPAY (Création de la transaction) ---
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${apiAuthToken}` // Authentification de l'utilisateur
+                },
+                body: JSON.stringify({
+                    gateway_id: gatewayId,
+                    amount: parseInt(amount),
+                    currency: currency,
+                    phone: document.getElementById('phone').value,
+                    direct: document.getElementById('directPush').checked
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                console.error("Erreur API:", result);
+                let errorMsg = result.message || "Erreur de validation ou d'authentification.";
+                if(result.errors) errorMsg += " <br>" + JSON.stringify(result.errors);
+                throw new Error(errorMsg);
+            }
+
+            // --- 3. Récupération du token FedaPay renvoyé par le backend ---
+            // Assurez-vous que le chemin (data.metadata.payment_token) correspond au JSON de votre API KODIPAY.
+            if (result.data.metadata.payment_token) {
+                showStatus(`✅ Paiement créé (Token: ${result.data.metadata.payment_token}).<br>🚀 Lancement du widget FedaPay...`, "success");
+                launchFedaPayWidget(publicKey, result.data.metadata.payment_token);
+            } else {
+                showStatus(`✅ Paiement direct lancé !<br>Vérifiez le "Push" sur votre téléphone (ou simulez dans le dashboard FedaPay).`, "success");
+            }
+
+        } catch (error) {
+            showStatus(`❌ Erreur: ${error.message}`, 'error');
+        } finally {
+            payButton.disabled = false;
+            payButton.innerText = "Payer maintenant";
+        }
+    }
+
+    function launchFedaPayWidget(publicKey, token) {
+        // Initialisation du SDK FedaPay
+        let widget = FedaPay.init({
+            public_key: publicKey,
+            token: token,
+            onComplete: function(info) {
+                // Ce callback s'exécute quand l'utilisateur ferme le popup FedaPay.
+                // Attention : Le statut final réel (payé ou échoué) sera confirmé via vos Webhooks (backend).
+                console.log("Détails retournés par le widget FedaPay:", info);
+                
+                showStatus(`
+                    <strong>🏁 Processus FedaPay terminé.</strong><br>
+                    L'utilisateur a fermé le widget ou la transaction est finie.<br><br>
+                    <em>Note: Attendez le webhook backend pour confirmer le statut final de la commande.</em><br><br>
+                    <code>${JSON.stringify(info)}</code>
+                `, "info");
+            }
+        });
+
+        // Ouvre l'interface de paiement
+        widget.open();
+    }
+</script>
+
+</body>
+</html>

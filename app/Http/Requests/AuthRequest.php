@@ -22,7 +22,10 @@ class AuthRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string',
+            'firstname' => 'required|string|max:255',
+            'lastname' => 'nullable|string|max:255',
+            'phone_number' => 'nullable|string|max:20',
+            'country' => 'nullable|string|max:5',
             'email' => 'required|email|unique:users',
             'password' => 'required|min:8|confirmed'
         ];

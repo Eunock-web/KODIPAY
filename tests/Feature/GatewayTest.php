@@ -18,7 +18,7 @@ class GatewayTest extends TestCase
             ->actingAs($user, 'sanctum')
             ->postJson('/api/gateways', [
                 'gateway_type' => 'fedapay',
-                'api_key' => 'sk_sandbox_test_123',
+                'public_key' => 'sk_sandbox_test_123',
                 'is_live' => false,
             ]);
 
@@ -41,7 +41,8 @@ class GatewayTest extends TestCase
             ->actingAs($user, 'sanctum')
             ->postJson('/api/gateways', [
                 'gateway_type' => 'invalid_gateway',
-                'api_key' => 'sk_sandbox_test_123',
+                'public_key' => 'sk_sandbox_test_123',
+                'is_live' => false,
             ]);
 
         $response->assertStatus(422);

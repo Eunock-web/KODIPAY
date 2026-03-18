@@ -9,15 +9,15 @@ use FedaPay\Webhook;
 class FedapayDriver implements PaymentsGatewayInterface
 {
     public function __construct(
-        private string $apiKey,
-        private bool $is_live,
-        private array $settings = []
+        private string $publicKey,
+        private string $privateKey,
+        private bool $is_live
     ) {}
 
-    public function makePayment(int $amount, string $currency, array $options): object
+    public function makePayment(int $amount, string $currency, array $options = []): object
     {
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
-        \FedaPay\FedaPay::setApiKey($this->apiKey);
+        \FedaPay\FedaPay::setApiKey($this->privateKey);
 
         $params = [
             'amount' => $amount,
@@ -33,10 +33,11 @@ class FedapayDriver implements PaymentsGatewayInterface
                     'country' => $options['country'] ?? 'bj'
                 ]
             ],
-            'merchant_reference' => 'KODI-' . uniqid(),
-            'custom_metadata' => [
-                'payout_destination' => $options['payout_destination'] ?? null,
-            ]
+            // 'merchant_reference' => 'KODI-' . uniqid(),
+            // 'custom_metadata' => [
+            //     'payout_destination' => $options['payout_destination'] ?? null,
+            // ],
+            // 'send_now' => true
         ];
 
         \Illuminate\Support\Facades\Log::info('Initiating FedaPay payment', ['params' => $params]);
@@ -50,7 +51,13 @@ class FedapayDriver implements PaymentsGatewayInterface
                 'token' => $token->token
             ]);
 
+            if ($options['direct'] ?? false) {
+                $mode = $this->detectMode($options['phone'] ?? '66000001');
+                $fedapayTransaction->sendNow($mode);
+            }
+
             return (object) [
+                'status' => 'success',
                 'external_id' => $fedapayTransaction->id,
                 'url' => $token->url,
                 'token' => $token->token
@@ -67,7 +74,7 @@ class FedapayDriver implements PaymentsGatewayInterface
     public function payout(int $amount, string $currency, string $destination): object
     {
         //  Configuration du SDK (Toujours nécessaire dans chaque méthode du Driver)
-        \FedaPay\FedaPay::setApiKey($this->apiKey);
+        \FedaPay\FedaPay::setApiKey($this->privateKey);
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
 
         try {
@@ -76,7 +83,7 @@ class FedapayDriver implements PaymentsGatewayInterface
             $payout = Payout::create([
                 'amount' => $amount,
                 'currency' => ['iso' => $currency],
-                'mode' => $this->detectMode($destination),  // Utilisation d'une méthode de détection
+                // 'mode' => $this->detectMode($destination),  // Utilisation d'une méthode de détection
                 'customer' => [
                     'firstname' => 'Vendeur',
                     'lastname' => 'KODIPAY',
@@ -89,7 +96,7 @@ class FedapayDriver implements PaymentsGatewayInterface
             ]);
 
             // Envoi effectif des fonds
-            $payout->send();
+            $payout->sendNow();
 
             return (object) [
                 'status' => 'success',
@@ -106,17 +113,17 @@ class FedapayDriver implements PaymentsGatewayInterface
      */
     private function detectMode(string $number): string
     {
-        // Logique simplifiée : si le numéro commence par 97/61/etc c'est MTN, sinon Moov
+        // Logique simplifiée : si le numéro commence par 97/96/61/62/etc c'est MTN, sinon Moov
         // À perfectionner selon les préfixes réels du pays
         $mtnPrefixes = ['97', '96', '61', '62', '51', '52', '53', '54'];
         $prefix = substr($number, 0, 2);
 
-        return in_array($prefix, $mtnPrefixes) ? 'mtn' : 'moov';
+        return in_array($prefix, $mtnPrefixes) ? 'mtn_open' : 'moov';
     }
 
     public function validateWebhook(array $payload, array $headers): object
     {
-        \FedaPay\FedaPay::setApiKey($this->apiKey);
+        \FedaPay\FedaPay::setApiKey($this->privateKey);
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
 
         try {
@@ -128,7 +135,7 @@ class FedapayDriver implements PaymentsGatewayInterface
             }
 
             // Utiliser le secret webhook si disponible, sinon la clé API
-            $secret = $this->settings['webhook_secret'] ?? $this->apiKey;
+            $secret = $this->privateKey;
 
             // Vérification cryptographique via le SDK
             $event = Webhook::constructEvent(
@@ -155,7 +162,7 @@ class FedapayDriver implements PaymentsGatewayInterface
 
     public function retrieveTransaction(string $externalId): object
     {
-        \FedaPay\FedaPay::setApiKey($this->apiKey);
+        \FedaPay\FedaPay::setApiKey($this->privateKey);
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
 
         try {
@@ -170,7 +177,7 @@ class FedapayDriver implements PaymentsGatewayInterface
             // Mapper le statut FedaPay vers le statut KODIPAY si nécessaire
             // FedaPay status: approved, pending, canceled, declined, transferred, refunded
             $status = 'pending';
-            if ($fedapayTransaction->status === 'approved') {
+            if (in_array($fedapayTransaction->status, ['approved', 'transferred'])) {
                 $status = 'success';
             } elseif (in_array($fedapayTransaction->status, ['canceled', 'declined', 'refunded'])) {
                 $status = 'failed';

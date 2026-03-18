@@ -15,10 +15,12 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignUuid('gateway_id')->constrained('gateways')->cascadeOnDelete();
             $table->integer('amount');
+            $table->string('transaction_type')->default('collect');
             $table->string('currency');
             $table->string('status')->default('pending');
             $table->integer('escrow_duration')->nullable();
             $table->jsonb('metadata')->nullable();
+            $table->string('callback_url')->nullable();
             $table->timestamps();
         });
     }

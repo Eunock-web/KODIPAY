@@ -12,7 +12,7 @@ class KkapayDriver implements PaymentsGatewayInterface
         private ?string $publicKey = null
     ) {}
 
-    public function makePayment(int $amount, string $currency, array $options): object
+    public function makePayment(int $amount, string $currency, array $options = []): object
     {
         $url = $this->is_live
             ? 'https://api.kkapay.com/v1/create'
@@ -44,6 +44,7 @@ class KkapayDriver implements PaymentsGatewayInterface
         }
 
         return (object) [
+            'status' => 'success',
             'external_id' => $data['id'],
             'url' => $data['payment_url'],
             'token' => $data['token'] ?? null
@@ -99,6 +100,39 @@ class KkapayDriver implements PaymentsGatewayInterface
             'status' => 'success',
             'external_id' => $data['id'] ?? null,
             'raw' => $data
+        ];
+    }
+
+    public function retrieveTransaction(string $externalId): object
+    {
+        $url = $this->is_live
+            ? "https://api.kkapay.com/v1/transactions/{$externalId}"
+            : "https://sandbox-api.kkapay.com/v1/transactions/{$externalId}";
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $this->apiKey,
+            'X-Public-Key' => $this->publicKey
+        ])->get($url);
+
+        if ($response->failed()) {
+            throw new \Exception('Erreur KKAPay (retrieveTransaction) : ' . ($response->json()['message'] ?? $response->body()));
+        }
+
+        $data = $response->json();
+
+        // KKApay statuses → KODIPAY statuses
+        $status = 'pending';
+        if (($data['status'] ?? '') === 'SUCCESS') {
+            $status = 'success';
+        } elseif (in_array($data['status'] ?? '', ['FAILED', 'CANCELLED', 'REJECTED'])) {
+            $status = 'failed';
+        }
+
+        return (object) [
+            'status' => $status,
+            'external_id' => $data['id'] ?? $externalId,
+            'event' => 'transaction.' . strtolower($data['status'] ?? 'pending'),
+            'raw_data' => $data
         ];
     }
 }

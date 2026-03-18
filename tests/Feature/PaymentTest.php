@@ -20,7 +20,8 @@ class PaymentTest extends TestCase
     {
         return $user->gateways()->create([
             'gateway_type' => 'fedapay',
-            'api_key' => 'sk_sandbox_test_123',
+            'public_key' => 'pk_sandbox_test_123',
+            'private_key' => 'sk_sandbox_test_123',
             'is_live' => false,
         ]);
     }
@@ -34,6 +35,7 @@ class PaymentTest extends TestCase
         $mockDriver->method('makePayment')->willReturn((object) [
             'external_id' => 'fedapay_txn_99',
             'url' => 'https://pay.fedapay.com/pay/99',
+            'token' => 'fpt_test_token_123',
         ]);
 
         $mockService = $this->createMock(PaymentService::class);
@@ -49,6 +51,7 @@ class PaymentTest extends TestCase
                     'metadata' => [
                         'external_id' => 'fedapay_txn_99',
                         'payment_url' => 'https://pay.fedapay.com/pay/99',
+                        'payment_token' => 'fpt_test_token_123',
                         'payout_destination' => $data['payout_destination'] ?? null,
                     ],
                 ]);
@@ -85,6 +88,26 @@ class PaymentTest extends TestCase
             'currency' => 'XOF',
             'status' => 'pending',
         ]);
+    }
+
+    public function test_payment_returns_fedapay_token_for_direct_use(): void
+    {
+        $user = User::factory()->create();
+        $gateway = $this->createGatewayForUser($user);
+
+        $this->mockPaymentService($gateway);
+
+        $response = $this
+            ->actingAs($user, 'sanctum')
+            ->postJson('/api/payments', [
+                'gateway_id' => $gateway->id,
+                'amount' => 5000,
+                'currency' => 'XOF',
+            ]);
+
+        $response
+            ->assertStatus(201)
+            ->assertJsonPath('data.metadata.payment_token', 'fpt_test_token_123');
     }
 
     public function test_payment_fails_without_authentication(): void

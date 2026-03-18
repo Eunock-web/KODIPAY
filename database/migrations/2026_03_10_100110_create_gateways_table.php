@@ -15,9 +15,9 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->uuid('user_id');
             $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
-            $table->jsonb('settings')->nullable();
+            $table->text('public_key')->nullable();
+            $table->text('private_key')->nullable();
             $table->string('gateway_type');
-            $table->text('api_key');
             $table->boolean('is_live')->default(false);
             $table->timestamps();
         });

@@ -13,7 +13,8 @@ class AuthTest extends TestCase
     public function test_user_can_register(): void
     {
         $response = $this->postJson('/api/register', [
-            'name' => 'Alice Dupont',
+            'firstname' => 'Alice',
+            'lastname' => 'Dupont',
             'email' => 'alice@example.com',
             'password' => 'secret123',
             'password_confirmation' => 'secret123',
@@ -31,7 +32,8 @@ class AuthTest extends TestCase
         User::factory()->create(['email' => 'alice@example.com']);
 
         $response = $this->postJson('/api/register', [
-            'name' => 'Alice Dupont',
+            'firstname' => 'Alice',
+            'lastname' => 'Dupont',
             'email' => 'alice@example.com',
             'password' => 'secret123',
             'password_confirmation' => 'secret123',

@@ -23,10 +23,9 @@ class GatewayRequest extends FormRequest
     {
         return [
             'gateway_type' => 'required|in:fedapay,kkapay',
-            'api_key' => 'required|string',
+            'public_key' => 'required|string',
+            'private_key' => 'nullable|string',
             'is_live' => 'boolean',
-            'settings' => 'nullable|array',
-            'settings.public_key' => 'required_if:gateway_type,kkapay|string',
         ];
     }
 }

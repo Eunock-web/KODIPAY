@@ -12,8 +12,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-        use HasUuids;
-
+    use HasUuids;
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens;
 
@@ -23,7 +22,10 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'name',
+        'firstname',
+        'lastname',
+        'phone_number',
+        'country',
         'email',
         'password',
     ];
@@ -51,7 +53,8 @@ class User extends Authenticatable
         ];
     }
 
-    public function gateways(): HasMany{
+    public function gateways(): HasMany
+    {
         return $this->hasMany(Gateway::class);
     }
 }

@@ -19,7 +19,8 @@ class WebhookTest extends TestCase
         $user = User::factory()->create();
         $gateway = $user->gateways()->create([
             'gateway_type' => 'fedapay',
-            'api_key' => 'sk_test_123',
+            'public_key' => 'pk_test_123',
+            'private_key' => 'sk_test_123',
             'is_live' => false,
         ]);
 

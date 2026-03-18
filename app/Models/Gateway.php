@@ -11,15 +11,15 @@ class Gateway extends Model
 
     protected $fillable = [
         'user_id',
-        'settings',
+        'public_key',
+        'private_key',
         'gateway_type',
-        'api_key',
         'is_live'
     ];
 
    protected $casts = [
-        'api_key' => 'encrypted',
-        'settings' =>'json',
+        'public_key' => 'encrypted',
+        'private_key' => 'encrypted',
         'is_live' => 'boolean'
     ];
 }

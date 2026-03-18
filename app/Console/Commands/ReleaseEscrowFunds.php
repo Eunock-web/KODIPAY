@@ -26,8 +26,9 @@ class ReleaseEscrowFunds extends Command
     /**
      * Execute the console command.
      */
-    public function handle(PaymentService $paymentService){
-        $this->info("Vérification des fonds en séquestre...");
+    public function handle(PaymentService $paymentService)
+    {
+        $this->info('Vérification des fonds en séquestre...');
 
         //  Récupérer les transactions bloquées
         $transactions = Transaction::where('status', 'held')->get();
@@ -53,8 +54,7 @@ class ReleaseEscrowFunds extends Command
                     $transaction->update(['status' => 'completed']);
 
                     $this->info("Succès pour la transaction {$transaction->id}");
-
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     $attempts = ($transaction->metadata['payout_attempts'] ?? 0) + 1;
                     if ($attempts >= 3) {
                         // Après 3 essais, on abandonne et on alerte
@@ -67,7 +67,7 @@ class ReleaseEscrowFunds extends Command
                             ])
                         ]);
                         $this->error("Paiement ID {$transaction->id} définitivement échoué.");
-                    }else{
+                    } else {
                         // On incrémente juste le compteur, la commande réessaiera au prochain passage
                         $transaction->update([
                             'metadata' => array_merge($transaction->metadata, [
@@ -81,6 +81,6 @@ class ReleaseEscrowFunds extends Command
             }
         }
 
-        $this->info("Terminé !");
+        $this->info('Terminé !');
     }
 }

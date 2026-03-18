@@ -30,8 +30,8 @@ class PaymentController extends Controller
             // On fusionne les données validées du request avec les infos de l'utilisateur
             $data = array_merge($request->validated(), [
                 'email' => $user->email,
-                'firstname' => $user->name,
-                'lastname' => $user->lastname ?? 'YAGAMI',
+                'firstname' => $user->firstname,
+                'lastname' => $user->lastname,
             ]);
 
             $transaction = $this->service->initiate($gateway, $data);
@@ -59,14 +59,14 @@ class PaymentController extends Controller
             'external_id' => $external_id
         ]);
 
-        // 1. Trouver la transaction locale correspondante
+        //  Trouver la transaction locale correspondante
         $transaction = Transaction::where('metadata->external_id', $external_id)->first();
 
         if ($transaction) {
-            // 2. Déclencher une réconciliation manuelle immédiate
+            //  Déclencher une réconciliation manuelle immédiate
             $this->service->reconcile($transaction);
 
-            // 3. Rediriger vers l'URL de retour du client SI elle existe
+            //  Rediriger vers l'URL de retour du client SI elle existe
             if ($transaction->callback_url) {
                 // On ajoute les paramètres à l'URL de retour pour que le client sache le résultat
                 $separator = str_contains($transaction->callback_url, '?') ? '&' : '?';
@@ -108,24 +108,35 @@ class PaymentController extends Controller
      */
     private function processWebhook(Request $request, $gateway_id)
     {
-        $gateway = Gateway::findOrFail($gateway_id);
-        $driver = $this->service->resolveDriver($gateway);
+        try {
+            $gateway = Gateway::findOrFail($gateway_id);
+            $driver = $this->service->resolveDriver($gateway);
 
-        // Le driver traduit le langage spécifique du prestataire en langage KODIPAY
-        $verifiedData = $driver->validateWebhook($request->all(), $request->headers->all());
+            // Le driver traduit le langage spécifique du prestataire en langage KODIPAY
+            $verifiedData = $driver->validateWebhook($request->all(), $request->headers->all());
 
-        $transaction = Transaction::where('metadata->external_id', $verifiedData->external_id)->firstOrFail();
+            $transaction = Transaction::where('metadata->external_id', $verifiedData->external_id)->firstOrFail();
 
-        if ($verifiedData->event === 'transaction.approved' && $transaction->status === 'pending') {
-            $transaction->update([
-                'status' => 'held',
-                'metadata' => array_merge($transaction->metadata, [
-                    'confirmed_at' => now(),
-                    'expires_at' => now()->addHours($transaction->escrow_duration ?? 24)
-                ])
+            if (in_array($verifiedData->event, ['transaction.approved', 'transaction.transferred']) && $transaction->status === 'pending') {
+                $transaction->update([
+                    'status' => 'held',
+                    'metadata' => array_merge($transaction->metadata, [
+                        'confirmed_at' => now(),
+                        'expires_at' => now()->addHours($transaction->escrow_duration ?? 24)
+                    ])
+                ]);
+            }
+
+            return response()->json(['status' => 'processed', 'message' => 'Event processed']);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Webhook processing failed', [
+                'gateway_id' => $gateway_id,
+                'error' => $e->getMessage()
             ]);
-        }
 
-        return response()->json(['status' => 'processed']);
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 400);  // Retourner 400 comme attendu par les tests en cas d'erreur de validation/not found
+        }
     }
 }

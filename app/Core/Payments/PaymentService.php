@@ -15,14 +15,14 @@ class PaymentService
     public function resolveDriver(Gateway $gateway): PaymentsGatewayInterface
     {
         if ($gateway->gateway_type == 'fedapay') {
-            return new FedapayDriver($gateway->api_key, $gateway->is_live, $gateway->settings ?? []);
+            return new FedapayDriver($gateway->public_key, $gateway->private_key, $gateway->is_live);
         }
 
         if ($gateway->gateway_type == 'kkapay') {
             return new \App\Gateways\Kkapay\KkapayDriver(
-                $gateway->api_key,
+                $gateway->public_key,
                 $gateway->is_live,
-                $gateway->settings['public_key'] ?? null
+                $gateway->private_key ?? null
             );
         }
 
@@ -36,21 +36,26 @@ class PaymentService
         // On demande au driver de créer le paiement chez le prestataire
         $paymentInfo = $driver->makePayment($data['amount'], $data['currency'], $data);
 
-        // On enregistre la transaction dans NOTRE base de données Kodipay
-        return Transaction::create([
-            'gateway_id' => $gateway->id,
-            'amount' => $data['amount'],
-            'currency' => $data['currency'],
-            'status' => 'pending',
-            'escrow_duration' => $data['escrow_duration'] ?? null,
-            'callback_url' => $data['callback_url'] ?? null,  // Sauvegarde de l'URL de retour client
-            'metadata' => [
-                'external_id' => $paymentInfo->external_id,
-                'payment_url' => $paymentInfo->url,
-                'payment_token' => $paymentInfo->token,
-                'payout_destination' => $data['payout_destination']
-            ]
-        ]);
+        if ($paymentInfo->status === 'success') {
+            // On enregistre la transaction dans NOTRE base de données Kodipay
+            return Transaction::create([
+                'gateway_id' => $gateway->id,
+                'amount' => $data['amount'],
+                'currency' => $data['currency'],
+                'status' => 'pending',
+                'escrow_duration' => $data['escrow_duration'] ?? null,
+                'callback_url' => $data['callback_url'] ?? null,  // Sauvegarde de l'URL de retour client
+                'transaction_type' => $data['transaction_type'] ?? 'collect',
+                'metadata' => [
+                    'external_id' => $paymentInfo->external_id,
+                    'payment_url' => $paymentInfo->url,
+                    'payment_token' => $paymentInfo->token,
+                    'payout_destination' => $data['payout_destination'] ?? null
+                ]
+            ]);
+        } else {
+            throw new Exception("Le paiement n'a pas été créé chez le prestataire");
+        }
     }
 
     /**

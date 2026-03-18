@@ -103,16 +103,17 @@ class FedapayDriver implements PaymentsGatewayInterface
             $payout = Payout::create([
                 'amount' => $amount,
                 'currency' => ['iso' => $currency],
-                // 'mode' => $this->detectMode($destination),  // Utilisation d'une méthode de détection
-                'customer' => [
-                    'firstname' => 'Vendeur',
-                    'lastname' => 'KODIPAY',
-                    'email' => 'payout@kodipay.com',
+                'description' => 'Virement KODIPAY vers marchand',
+                // L'utilisation de "recipient" est recommandée par FedaPay pour les dépôts
+                // Cela évite le problème d'écrasement de compte lié à une adresse e-mail unique
+                'recipient' => [
+                    'name' => 'Marchand KODIPAY',
                     'phone_number' => [
                         'number' => $destination,
-                        'country' => 'bj'  // Code pays (ex: bj, ci, tg)
+                        'country' => 'bj'
                     ]
-                ]
+                ],
+                'merchant_reference' => 'PAYOUT-' . uniqid()
             ]);
 
             // Envoi effectif des fonds

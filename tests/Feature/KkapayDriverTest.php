@@ -73,10 +73,17 @@ class KkapayDriverTest extends TestCase
         ];
 
         $signature = hash_hmac('sha256', json_encode($payload), $this->apiKey);
-        $headers = ['x-kkapay-signature' => [$signature]];
+
+        $request = new \Illuminate\Http\Request(
+            [], [], [], [], [],
+            ['HTTP_X_KKAPAY_SIGNATURE' => $signature],
+            json_encode($payload)
+        );
+        // On fusionne le tableau request pour que $request->all() fonctionne
+        $request->merge($payload);
 
         $driver = new KkapayDriver($this->apiKey, false);
-        $result = $driver->validateWebhook($payload, $headers);
+        $result = $driver->validateWebhook($request);
 
         $this->assertEquals('success', $result->status);
         $this->assertEquals('transaction.approved', $result->event);
@@ -86,14 +93,20 @@ class KkapayDriverTest extends TestCase
     public function test_validate_webhook_invalid_signature(): void
     {
         $payload = ['status' => 'SUCCESS'];
-        $headers = ['x-kkapay-signature' => ['wrong_signature']];
+
+        $request = new \Illuminate\Http\Request(
+            [], [], [], [], [],
+            ['HTTP_X_KKAPAY_SIGNATURE' => 'wrong_signature'],
+            json_encode($payload)
+        );
+        $request->merge($payload);
 
         $driver = new KkapayDriver($this->apiKey, false);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Signature KKAPay invalide.');
 
-        $driver->validateWebhook($payload, $headers);
+        $driver->validateWebhook($request);
     }
 
     public function test_payout_success(): void

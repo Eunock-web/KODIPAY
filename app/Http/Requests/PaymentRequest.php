@@ -21,16 +21,28 @@ class PaymentRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             'gateway_id' => ['required', 'string'],
             'amount' => ['required', 'integer', 'min:1'],
             'currency' => ['required', 'string', 'max:5'],
             'customer_email' => ['nullable', 'email'],
             'escrow_duration' => ['nullable', 'integer', 'min:1'],
             'payout_destination' => ['nullable', 'string'],
-            'callback_url' => ['nullable', 'url'],
-            'phone' => ['nullable', 'string'],
-            'transaction_type' => ['nullable', 'string', 'in:collect,payout'],
+            'transaction_type' => ['required', 'string', 'in:collect,payout'],
         ];
+
+        if ($this->is('api/payments/redirect')) {
+            $rules['callback_url'] = ['required', 'url'];
+        } else {
+            $rules['callback_url'] = ['nullable', 'url'];
+        }
+
+        if ($this->is('api/payments/direct')) {
+            $rules['phone'] = ['nullable', 'string'];
+        } else {
+            $rules['phone'] = ['nullable', 'string'];
+        }
+
+        return $rules;
     }
 }

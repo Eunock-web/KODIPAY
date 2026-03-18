@@ -15,7 +15,12 @@ class PaymentService
     public function resolveDriver(Gateway $gateway): PaymentsGatewayInterface
     {
         if ($gateway->gateway_type == 'fedapay') {
-            return new FedapayDriver($gateway->public_key, $gateway->private_key, $gateway->is_live);
+            return new FedapayDriver(
+                $gateway->public_key,
+                $gateway->private_key,
+                $gateway->is_live,
+                $gateway->webhook_secret
+            );
         }
 
         if ($gateway->gateway_type == 'kkapay') {
@@ -46,12 +51,12 @@ class PaymentService
                 'escrow_duration' => $data['escrow_duration'] ?? null,
                 'callback_url' => $data['callback_url'] ?? null,  // Sauvegarde de l'URL de retour client
                 'transaction_type' => $data['transaction_type'] ?? 'collect',
-                'metadata' => [
+                'metadata' => array_filter([
                     'external_id' => $paymentInfo->external_id,
-                    'payment_url' => $paymentInfo->url,
-                    'payment_token' => $paymentInfo->token,
+                    'payment_url' => !($data['direct'] ?? false) ? $paymentInfo->url : null,
+                    'payment_token' => ($data['direct'] ?? false) ? $paymentInfo->token : null,
                     'payout_destination' => $data['payout_destination'] ?? null
-                ]
+                ])
             ]);
         } else {
             throw new Exception("Le paiement n'a pas été créé chez le prestataire");

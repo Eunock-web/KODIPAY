@@ -11,25 +11,33 @@ class FedapayDriver implements PaymentsGatewayInterface
     public function __construct(
         private string $publicKey,
         private string $privateKey,
-        private bool $is_live
+        private bool $is_live,
+        private ?string $webhookSecret = null
     ) {}
 
     public function makePayment(int $amount, string $currency, array $options = []): object
     {
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
+
+        // Sécurité : Vérifier si on n'a pas mis une public key à la place de la private key
+        if (str_starts_with($this->privateKey, 'pk_')) {
+            \Illuminate\Support\Facades\Log::error('FedaPay Configuration Error: Public Key found in Private Key field.');
+            return (object) ['status' => 'failed', 'message' => 'Clé API Secrète invalide (commence par pk au lieu de sk)'];
+        }
+
         \FedaPay\FedaPay::setApiKey($this->privateKey);
 
         $params = [
             'amount' => $amount,
             'currency' => ['iso' => $currency],
             'description' => $options['description'] ?? 'Paiement KODIPAY',
-            'callback_url' => route('payments.callback', ['gateway_id' => $options['gateway_id'] ?? 'unknown']),  // URL de redirection client
+            'callback_url' => route('payments.callback', ['gateway_id' => $options['gateway_id'] ?? 'unknown']),
             'customer' => [
                 'firstname' => $options['firstname'] ?? 'Client',
                 'lastname' => $options['lastname'] ?? 'KODIPAY',
                 'email' => $options['email'] ?? 'customer@example.com',
                 'phone_number' => [
-                    'number' => $options['phone'] ?? '66000001',
+                    'number' => $options['phone'] ?? '64000001',
                     'country' => $options['country'] ?? 'bj'
                 ]
             ],
@@ -52,8 +60,20 @@ class FedapayDriver implements PaymentsGatewayInterface
             ]);
 
             if ($options['direct'] ?? false) {
-                $mode = $this->detectMode($options['phone'] ?? '66000001');
-                $fedapayTransaction->sendNow($mode);
+                // Pour FedaPay, le paiement direct (sans redirection) correspond au USSD Push
+                // On détecte l'opérateur (MTN/Moov) en fonction du préfixe du numéro
+                $phoneNumber = $options['phone'] ?? $options['phone_number']['number'] ?? '64000001';
+                $mode = $this->detectMode($phoneNumber);
+
+                \Illuminate\Support\Facades\Log::info('Triggering FedaPay USSD Push (direct)', [
+                    'mode' => $mode,
+                    'phone' => $phoneNumber
+                ]);
+
+                $fedapayTransaction->sendNowWithToken($mode, $token->token, [
+                    'number' => $phoneNumber,
+                    'country' => $options['country'] ?? 'bj'
+                ]);
             }
 
             return (object) [
@@ -113,35 +133,37 @@ class FedapayDriver implements PaymentsGatewayInterface
      */
     private function detectMode(string $number): string
     {
-        // Logique simplifiée : si le numéro commence par 97/96/61/62/etc c'est MTN, sinon Moov
-        // À perfectionner selon les préfixes réels du pays
-        $mtnPrefixes = ['97', '96', '61', '62', '51', '52', '53', '54'];
-        $prefix = substr($number, 0, 2);
+        // Nettoyage du numéro : on garde les chiffres
+        $cleanNumber = ltrim($number, '+0');
 
-        return in_array($prefix, $mtnPrefixes) ? 'mtn_open' : 'moov';
+        // Préfixes MTN (Bénin, Togo, CI) : 97-96-61-62-51-52-53-54-60-64-59-90-91-42-46-67-66-69
+        $mtnPrefixes = ['97', '96', '61', '62', '51', '52', '53', '54', '60', '64', '59', '90', '91', '42', '46', '67', '66', '69'];
+        $prefix = substr($cleanNumber, 0, 2);
+
+        // FedaPay : 'mtn' au Bénin/CI, 'moov' au Bénin/Togo, etc.
+        // Utilisation du code standard 'mtn' pour plus de compatibilité
+        return in_array($prefix, $mtnPrefixes) ? 'mtn' : 'moov';
     }
 
-    public function validateWebhook(array $payload, array $headers): object
+    public function validateWebhook(\Illuminate\Http\Request $request): object
     {
         \FedaPay\FedaPay::setApiKey($this->privateKey);
         \FedaPay\FedaPay::setEnvironment($this->is_live ? 'live' : 'sandbox');
 
         try {
-            // Récupération de la signature (insensible à la casse des headers)
-            $signature = $headers['x-fedapay-signature'][0] ?? null;
+            // Récupération de la signature
+            $signature = $request->header('x-fedapay-signature');
 
             if (!$signature) {
                 throw new \Exception('Signature manquante.');
             }
 
-            // Utiliser le secret webhook si disponible, sinon la clé API
-            $secret = $this->privateKey;
-
             // Vérification cryptographique via le SDK
-            $event = Webhook::constructEvent(
-                json_encode($payload),
+            // Il est impératif d'utiliser le JSON **brut** reçu pour que la signature concorde.
+            $event = \FedaPay\Webhook::constructEvent(
+                $request->getContent(),
                 $signature,
-                $secret
+                $this->webhookSecret ?? $this->privateKey  // Use webhookSecret if available, otherwise fallback to privateKey
             );
 
             // On retourne un objet standardisé pour notre PaymentService

@@ -51,17 +51,19 @@ class KkapayDriver implements PaymentsGatewayInterface
         ];
     }
 
-    public function validateWebhook(array $payload, array $headers): object
+    public function validateWebhook(\Illuminate\Http\Request $request): object
     {
         // KKApay signature verification
-        $signature = $headers['x-kkapay-signature'][0] ?? $headers['X-Kkapay-Signature'][0] ?? '';
+        $signature = $request->header('x-kkapay-signature') ?? $request->header('X-Kkapay-Signature') ?? '';
 
         if (empty($signature)) {
             throw new \Exception('Signature KKAPay manquante.');
         }
 
         // According to common practices and similar gateways, we verify using the API key
-        $expectedSignature = hash_hmac('sha256', json_encode($payload), $this->apiKey);
+        $expectedSignature = hash_hmac('sha256', $request->getContent(), $this->apiKey);
+
+        $payload = $request->all();
 
         if (!hash_equals($expectedSignature, $signature)) {
             throw new \Exception('Signature KKAPay invalide.');

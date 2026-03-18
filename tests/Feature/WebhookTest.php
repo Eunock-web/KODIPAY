@@ -56,9 +56,11 @@ class WebhookTest extends TestCase
 
         $this->app->instance(PaymentService::class, $mockService);
 
-        $response = $this->postJson("/api/webhooks/fedapay/{$gateway->id}", [
+        $response = $this->postJson('/api/webhooks/fedapay', [
             'event' => 'transaction.approved',
-            // les autres données ne sont pas examinées par test grace au mock
+            'data' => [
+                'id' => 'fedapay_txn_777'
+            ]
         ], [
             'HTTP_X_FEDAPAY_SIGNATURE' => 'dummy_signature'
         ]);
@@ -86,7 +88,11 @@ class WebhookTest extends TestCase
 
         $this->app->instance(PaymentService::class, $mockService);
 
-        $response = $this->postJson("/api/webhooks/fedapay/{$gateway->id}", [], [
+        $response = $this->postJson('/api/webhooks/fedapay', [
+            'data' => [
+                'id' => 'fedapay_txn_777'
+            ]
+        ], [
             'HTTP_X_FEDAPAY_SIGNATURE' => 'invalid_signature'
         ]);
 
@@ -112,7 +118,11 @@ class WebhookTest extends TestCase
         $mockService->method('resolveDriver')->willReturn($mockDriver);
         $this->app->instance(PaymentService::class, $mockService);
 
-        $response = $this->postJson("/api/webhooks/fedapay/{$gateway->id}", []);
+        $response = $this->postJson('/api/webhooks/fedapay', [
+            'data' => [
+                'id' => 'unknown_id'
+            ]
+        ]);
 
         // 400 car l'erreur levée par "firstOrFail()" devient ModelNotFoundException
         // qui est convertie en 400 dans le catch global du PaymentController::callback

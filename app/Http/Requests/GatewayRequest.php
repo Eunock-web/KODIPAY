@@ -22,10 +22,11 @@ class GatewayRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'gateway_type' => 'required|in:fedapay,kkapay',
-            'public_key' => 'required|string',
-            'private_key' => 'nullable|string',
-            'is_live' => 'boolean',
+            'public_key' => ['required', 'string'],
+            'private_key' => ['nullable', 'string'],
+            'gateway_type' => ['required', 'string', 'in:fedapay,kkapay'],
+            'is_live' => ['boolean'],
+            'webhook_secret' => ['nullable', 'string'],
         ];
     }
 }

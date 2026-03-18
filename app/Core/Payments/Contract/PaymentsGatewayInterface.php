@@ -8,7 +8,7 @@ interface PaymentsGatewayInterface
 
     public function payout(int $amount, string $currency, string $destination): object;
 
-    public function validateWebhook(array $payload, array $headers): object;
+    public function validateWebhook(\Illuminate\Http\Request $request): object;
 
     public function retrieveTransaction(string $externalId): object;
 }

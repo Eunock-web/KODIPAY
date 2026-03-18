@@ -16,8 +16,28 @@ class PaymentController extends Controller
         private PaymentService $service
     ) {}
 
-    // Fonction pour l'initialisation d'un paiement
+    // Fonction pour l'initialisation d'un paiement (Standard/Legacy)
     public function store(PaymentRequest $request)
+    {
+        return $this->initiatePayment($request);
+    }
+
+    // Endpoint spécifique pour le flux avec redirection (Paiement avec lien)
+    public function storeRedirect(PaymentRequest $request)
+    {
+        return $this->initiatePayment($request, false);
+    }
+
+    // Endpoint spécifique pour le flux direct (USSD Push / Sans redirection)
+    public function storeDirect(PaymentRequest $request)
+    {
+        return $this->initiatePayment($request, true);
+    }
+
+    /**
+     * Logique commune d'initialisation de paiement
+     */
+    private function initiatePayment(PaymentRequest $request, ?bool $isDirect = null)
     {
         try {
             $user = Auth::user();
@@ -25,7 +45,8 @@ class PaymentController extends Controller
                 return response()->json(['error' => 'Unauthenticated'], 401);
             }
 
-            $gateway = Gateway::findOrFail($request->gateway_id);
+            // Sécurité : on s'assure que le gateway appartient à l'utilisateur
+            $gateway = $user->gateways()->findOrFail($request->gateway_id);
 
             // On fusionne les données validées du request avec les infos de l'utilisateur
             $data = array_merge($request->validated(), [
@@ -33,6 +54,11 @@ class PaymentController extends Controller
                 'firstname' => $user->firstname,
                 'lastname' => $user->lastname,
             ]);
+
+            // Si isDirect est précisé, on l'ajoute aux données
+            if ($isDirect !== null) {
+                $data['direct'] = $isDirect;
+            }
 
             $transaction = $this->service->initiate($gateway, $data);
 
@@ -91,13 +117,51 @@ class PaymentController extends Controller
         return $this->processWebhook($request, $gateway_id);
     }
 
-    // Pour FedaPay
+    // Pour FedaPay (générique)
+    public function fedapayWebhook(Request $request)
+    {
+        $payload = $request->all();
+        $externalId = $payload['data']['id'] ?? null;
+
+        if (!$externalId) {
+            return response()->json(['error' => 'No external_id found in payload'], 400);
+        }
+
+        $transaction = Transaction::where('metadata->external_id', $externalId)->first();
+
+        if (!$transaction) {
+            return response()->json(['error' => 'Transaction not found'], 400);
+        }
+
+        return $this->processWebhook($request, $transaction->gateway_id);
+    }
+
+    // Pour KKAPay (générique)
+    public function kkapayWebhook(Request $request)
+    {
+        $payload = $request->all();
+        $externalId = $payload['transactionId'] ?? null;
+
+        if (!$externalId) {
+            return response()->json(['error' => 'No transactionId found in payload'], 400);
+        }
+
+        $transaction = Transaction::where('metadata->external_id', $externalId)->first();
+
+        if (!$transaction) {
+            return response()->json(['error' => 'Transaction not found'], 404);
+        }
+
+        return $this->processWebhook($request, $transaction->gateway_id);
+    }
+
+    // Pour FedaPay (avec ID)
     public function callbackFedaPay(Request $request, $gateway_id)
     {
         return $this->processWebhook($request, $gateway_id);
     }
 
-    // Pour KKAPay
+    // Pour KKAPay (avec ID)
     public function callbackKKAPay(Request $request, $gateway_id)
     {
         return $this->processWebhook($request, $gateway_id);
@@ -113,9 +177,15 @@ class PaymentController extends Controller
             $driver = $this->service->resolveDriver($gateway);
 
             // Le driver traduit le langage spécifique du prestataire en langage KODIPAY
-            $verifiedData = $driver->validateWebhook($request->all(), $request->headers->all());
+            $verifiedData = $driver->validateWebhook($request);
 
-            $transaction = Transaction::where('metadata->external_id', $verifiedData->external_id)->firstOrFail();
+            $transaction = Transaction::where('metadata->external_id', $verifiedData->external_id)->first();
+
+            if (!$transaction) {
+                // If it's a webhook for something we don't have, gracefully return 400
+                // to avoid spamming the log with ModelNotFoundException.
+                return response()->json(['error' => 'Transaction not found for this external_id: ' . $verifiedData->external_id], 400);
+            }
 
             if (in_array($verifiedData->event, ['transaction.approved', 'transaction.transferred']) && $transaction->status === 'pending') {
                 $transaction->update([

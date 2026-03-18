@@ -16,13 +16,17 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Route pour initier un paiement
     Route::post('/payments', [PaymentController::class, 'store']);
+    Route::post('/payments/redirect', [PaymentController::class, 'storeRedirect']);
+    Route::post('/payments/direct', [PaymentController::class, 'storeDirect']);
 });
 
 // Routes pour FedaPay
-Route::post('/webhooks/fedapay/{gateway_id}', [PaymentController::class, 'callbackFedaPay'])
-    ->name('webhooks.fedapay');
-Route::get('/payments/callback/{gateway_id}', [PaymentController::class, 'handleReturn'])
-    ->name('payments.callback');
+Route::post('/payments/callback/{gateway_id}', [PaymentController::class, 'callback'])->name('payments.callback');
+Route::get('/payments/return/{gateway_id}', [PaymentController::class, 'handleReturn'])->name('payments.return');
+
+// Generic Webhook Endpoints (without gateway_id in URL)
+Route::post('/webhooks/fedapay', [PaymentController::class, 'fedapayWebhook'])->name('webhooks.fedapay');
+Route::post('/webhooks/kkapay', [PaymentController::class, 'kkapayWebhook'])->name('webhooks.kkapay');
 
 // Webhook KKAPay
 Route::post('/webhooks/kkapay/{gateway_id}', [PaymentController::class, 'callbackKKAPay'])
